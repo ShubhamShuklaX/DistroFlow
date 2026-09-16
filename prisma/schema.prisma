@@ -1,0 +1,161 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./distroflow.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         String        // distributor, sales_exec, warehouse_manager, accountant, delivery_person, retailer
+  phone        String?
+  avatarUrl    String?
+  createdAt    DateTime      @default(now())
+
+  staffProfile  StaffProfile?
+  retailer      Retailer?
+
+  placedOrders     Order[] @relation("PlacedByStaff")
+  packedOrders     Order[] @relation("PackedByStaff")
+  deliveredOrders  Order[] @relation("DeliveredByStaff")
+  paymentsCollected Payment[] @relation("CollectedByStaff")
+  auditLogs        AuditLog[]
+}
+
+model StaffProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone              String   // North, South, East, West, Central
+  salary            Float
+  commissionPercent Float    @default(0.0)
+  status            String   @default("active") // active, inactive
+  hiredOn           DateTime @default(now())
+}
+
+model Retailer {
+  id                 String    @id @default(cuid())
+  userId             String?   @unique
+  user               User?     @relation(fields: [userId], references: [id])
+  shopName           String
+  ownerName          String
+  email              String
+  phone              String
+  gstNo              String
+  address            String
+  city               String
+  zone               String    // North, South, East, West, Central
+  creditLimit        Float     @default(150000.0)
+  outstandingBalance Float     @default(0.0)
+  tag                String    @default("Standard") // Premium, Standard, High Risk, New
+  status             String    @default("active")   // active, inactive, blocked
+  assignedSalesExecId String?
+  createdAt          DateTime  @default(now())
+
+  orders             Order[]
+  payments           Payment[]
+}
+
+model Product {
+  id                String      @id @default(cuid())
+  sku               String      @unique
+  name              String
+  category          String      // Beverages, Packaged Foods, Personal Care, Household Goods, Dairy & Cold
+  unit              String      @default("Case") // Case, Carton, Pack, Box, Unit
+  price             Float
+  taxPercent        Float       @default(18.0)
+  stockQty          Int         @default(0)
+  reorderThreshold  Int         @default(20)
+  warehouseLocation String      @default("Bay 1")
+  imageUrl          String?
+  createdAt         DateTime    @default(now())
+
+  orderItems        OrderItem[]
+}
+
+model Order {
+  id                 String      @id
+  retailerId         String
+  retailer           Retailer    @relation(fields: [retailerId], references: [id])
+  status             String      @default("Placed") // Placed, Confirmed, Packed, Dispatched, Delivered, Cancelled
+  paymentStatus      String      @default("Unpaid") // Unpaid, Partial, Paid, Overdue
+  subtotal           Float
+  taxAmount          Float
+  totalAmount        Float
+  paidAmount         Float       @default(0.0)
+  hasBackorder       Boolean     @default(false)
+  notes              String?
+  deliveryZone       String?
+
+  placedByStaffId    String?
+  placedBy           User?       @relation("PlacedByStaff", fields: [placedByStaffId], references: [id])
+
+  packedByStaffId    String?
+  packedBy           User?       @relation("PackedByStaff", fields: [packedByStaffId], references: [id])
+
+  deliveredByStaffId String?
+  deliveredBy        User?       @relation("DeliveredByStaff", fields: [deliveredByStaffId], references: [id])
+
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  items              OrderItem[]
+  payments           Payment[]
+}
+
+model OrderItem {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  qty            Int
+  fulfilledQty   Int
+  backorderedQty Int      @default(0)
+  unitPrice      Float
+  totalPrice     Float
+}
+
+model Payment {
+  id                 String   @id
+  retailerId         String
+  retailer           Retailer @relation(fields: [retailerId], references: [id])
+  orderId            String?
+  order              Order?   @relation(fields: [orderId], references: [id])
+  amount             Float
+  mode               String   // UPI, Cash, Bank Transfer, Cheque
+  referenceNo        String?
+  date               DateTime @default(now())
+  status             String   @default("Completed") // Completed, Pending, Failed
+
+  collectedByStaffId String?
+  collectedBy        User?    @relation("CollectedByStaff", fields: [collectedByStaffId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  userName  String
+  userRole  String
+  action    String
+  entity    String
+  details   String
+  timestamp DateTime @default(now())
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  targetRole String   // all, distributor, sales_exec, warehouse_manager, accountant, delivery_person, retailer
+  userId     String?
+  title      String
+  message    String
+  type       String   @default("system") // order, stock, payment, system
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
